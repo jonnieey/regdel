@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # coding=utf-8
 
 # Regdel, a ncurses inteface to ledger
@@ -408,7 +408,7 @@ class App:
             if self.process(req): break
 
 if len(sys.argv) != 2:
-    print "USAGE: regdel <ledger-file>"
+    print("USAGE: regdel <ledger-file>")
     sys.exit(-1)
 
 curses.initscr()
@@ -428,4 +428,4 @@ def start(scr):
 try:
     curses.wrapper(start)
 except subprocess.CalledProcessError as err:
-    print err.output
+    print(err.output)
