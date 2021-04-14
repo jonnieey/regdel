@@ -47,9 +47,11 @@ KEY_MAP = {
     curses.KEY_UP:      "PREV_LINE",
     curses.KEY_DOWN:    "NEXT_LINE",
     ord('q'):           "QUIT",
+    ord('h'):           "BACK",
     ord('x'):           "COMMODITY",
     ord('r'):           "REAL",
     ord('\n'):          "SELECT",
+    ord('l'):          "SELECT",
     ord('b'):           "BALANCE",
     curses.KEY_NPAGE:   "NEXT_PAGE",
     ord(' '):           "NEXT_PAGE",
@@ -84,7 +86,9 @@ def ledger(path, cmd, query="", form=None, commodity=None, real=None, options=No
         args += ['--real']
     args += [query]
     out = subprocess.check_output(args, stderr=subprocess.STDOUT)
-    out = [x for x in out.split('\n') if x.strip()]
+
+    # decode bytes output to string output.decode()
+    out = [x for x in out.decode().split('\n') if x.strip()]
     if form is not None:
         out = [x for x in csv.reader(out)]
         if form_keys is not None:
@@ -186,7 +190,9 @@ class View(object):
         # in unicode (so that the length are correct) but addstr only
         # works with ascii.
         def decode(x):
-            return x.decode('utf-8') if isinstance(x, str) else x
+            # python3 uses strings instead of bytes
+            return x
+            # return x.decode('utf-8') if not isinstance(x, str) else x
         attr = kargs.get('attr', "")
         args = [decode(x) for x in args]
         kargs = {k: decode(x) for k, x in kargs.items()}
@@ -256,18 +262,21 @@ class RegView(View):
 
     def render(self, win, i):
         if i >= len(self.lines): return
-        line = self.lines[i]
-        if not line: return
-        cur = 'cursor' if i == self.lineno else None
-        self.addstr("{} ", line['date'], attr = cur or 'date')
-        self.addstr("{:<20.20} ", line['payee'], attr = cur or 'payee')
-        self.addstr("{:<20.20} ", line['account'], attr = cur or 'payee')
-        self.addstr("{:>20} ", line['amount'], attr = cur or 'value_pos')
-        tot = "ERR"
-        for t in line['total'].split('\\n'):
-            if line['commodity'] in t:
-                tot = t
-        self.addstr("{:>20} ", tot, attr = cur)
+        try:
+            line = self.lines[i]
+            if not line: return
+            cur = 'cursor' if i == self.lineno else None
+            self.addstr("{} ", line['date'], attr = cur or 'date')
+            self.addstr("{:<20.20} ", line['payee'], attr = cur or 'payee')
+            self.addstr("{:<20.20} ", line['account'], attr = cur or 'payee')
+            self.addstr("{:>20} ", line['amount'], attr = cur or 'value_pos')
+            tot = "ERR"
+            for t in line['total'].split('\\n'):
+                if line['commodity'] in t:
+                    tot = t
+            self.addstr("{:>20} ", tot, attr = cur)
+        except IndexError as error:
+            pass
 
     def render_bar(self, win):
         win.addstr(self.account)
@@ -278,16 +287,19 @@ class RegView(View):
         win.addstr(" {}".format(self.commodities))
 
     def select(self, i):
-        line = self.lines[i]
-        query = '{} @{}'.format(self.account, line['payee'])
-        date = datetime.datetime.strptime(line['date'], '%Y/%m/%d').date()
-        enddate = date + datetime.timedelta(1)
-        out = ledger(self.app.path, 'print', query, real=self.real,
-                     options=['--raw',
-                              '--effective',
-                              '--begin', "{}".format(date),
-                              '--end', "{}".format(enddate)])
-        return TransactionView(self.app, self.full, out)
+        try:
+            line = self.lines[i]
+            query = '{} @{}'.format(self.account, line['payee'])
+            date = datetime.datetime.strptime(line['date'], '%Y/%m/%d').date()
+            enddate = date + datetime.timedelta(1)
+            out = ledger(self.app.path, 'print', query, real=self.real,
+                         options=['--raw',
+                                  '--effective',
+                                  '--begin', "{}".format(date),
+                                  '--end', "{}".format(enddate)])
+            return TransactionView(self.app, self.full, out)
+        except IndexError as error:
+            pass
 
     def selected_account(self, i):
         return self.account
@@ -361,6 +373,11 @@ class App:
             if not self.views: return True
             self.view = self.views[-1]
             self.view.refresh()
+        if req == "BACK":
+            if len(self.views) > 1:
+                self.views.pop()
+                self.view = self.views[-1]
+                self.view.refresh()
         if req == "REAL":
             self.view.toggle_real()
             self.view.refresh()
